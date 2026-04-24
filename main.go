@@ -9,9 +9,12 @@ import (
 )
 
 const (
-	windowWidth  = 800
+	// Largura inicial da janela em pixels.
+	windowWidth = 800
+	// Altura inicial da janela em pixels.
 	windowHeight = 600
-	windowTitle  = "g-engine"
+	// Titulo mostrado na barra da janela.
+	windowTitle = "g-engine"
 )
 
 func init() {
@@ -20,98 +23,152 @@ func init() {
 }
 
 func main() {
+	// Cria a janela e inicializa a GLFW.
 	window := initGLFW()
+	// Garante que a GLFW sera encerrada ao sair do programa.
 	defer glfw.Terminate()
 
+	// Carrega as funcoes OpenGL depois que o contexto estiver ativo.
 	initOpenGL()
 
+	// Compila os shaders e cria o programa que a GPU vai usar no draw.
 	program, err := NewShaderProgram("assets/shaders/basic.vert", "assets/shaders/basic.frag")
 	if err != nil {
 		log.Fatalln("erro ao criar shader program:", err)
 	}
 
-	vertices := []float32{
-		// posicao        // cor
-		-0.5, 0.5, 0.0, 1.0, 0.0, 0.0,
-		0.5, 0.5, 0.0, 0.0, 1.0, 0.0,
-		0.5, -0.5, 0.0, 0.0, 0.0, 1.0,
-		-0.5, -0.5, 0.0, 1.0, 1.0, 0.0,
+	// Carrega a textura do sprite e faz o upload uma vez para a GPU.
+	texture, err := NewTexture("assets/textures/zombie1.png")
+	if err != nil {
+		log.Fatalln("erro ao carregar textura:", err)
 	}
 
+	// O sampler "texture0" vai ler da unidade de textura 0.
+	gl.UseProgram(program)
+	textureUniform := gl.GetUniformLocation(program, gl.Str("texture0\x00"))
+	gl.Uniform1i(textureUniform, 0)
+
+	// Cada vertice tem 5 floats:
+	// x, y, z, u, v
+	// Os quatro vertices abaixo representam os quatro cantos do quadrado.
+	vertices := []float32{
+		// posicao         // UV
+		-0.5, 0.5, 0.0, 0.0, 0.0,
+		0.5, 0.5, 0.0, 1.0, 0.0,
+		0.5, -0.5, 0.0, 1.0, 1.0,
+		-0.5, -0.5, 0.0, 0.0, 1.0,
+	}
+
+	// Dois triangulos formam um quadrado.
+	// Esses indices dizem em que ordem os vertices serao usados.
 	indices := []uint32{
 		0, 1, 2,
 		2, 3, 0,
 	}
 
-	var vao uint32
-	var vbo uint32
-	var ebo uint32
+	// VAO: guarda a configuracao dos atributos de vertice.
+	var vao uint32 //(Vertex Array Object)
+	// VBO: guarda os dados dos vertices na GPU.
+	var vbo uint32 //(Vertex Buffer object)
+	// EBO: guarda os indices na GPU.
+	var ebo uint32 // Element Buffer Object
 
+	// Pede ao OpenGL identificadores para esses objetos.
 	gl.GenVertexArrays(1, &vao)
 	gl.GenBuffers(1, &vbo)
 	gl.GenBuffers(1, &ebo)
 
+	// A partir daqui, a configuracao de atributos ficara vinculada a este VAO.
 	gl.BindVertexArray(vao)
 
+	// Envia o array de vertices para a GPU.
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
 	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*4, gl.Ptr(vertices), gl.STATIC_DRAW)
 
+	// Envia o array de indices para a GPU.
 	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo)
 	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices)*4, gl.Ptr(indices),
 		gl.STATIC_DRAW)
 
-	// layout(location = 0) -> vec3 position
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 6*4, gl.PtrOffset(0))
+	// Define como o atributo 0 deve ser lido:
+	// 3 floats por vertice, stride de 5 floats, comecando no byte 0.
+	// Isso corresponde ao "layout(location = 0) in vec3 aPos" do shader.
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 5*4, gl.PtrOffset(0))
 	gl.EnableVertexAttribArray(0)
 
-	// layout(location = 1) -> vec3 color
-	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, 6*4, gl.PtrOffset(3*4))
+	// Define como o atributo 1 deve ser lido:
+	// 2 floats por vertice, comecando apos os 3 floats de posicao.
+	// Isso corresponde ao "layout(location = 1) in vec2 aTexCoord".
+	gl.VertexAttribPointer(1, 2, gl.FLOAT, false, 5*4, gl.PtrOffset(3*4))
 	gl.EnableVertexAttribArray(1)
 
+	// O VBO pode ser desassociado; o VAO ja guardou a configuracao.
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+	// Desassocia o VAO por organizacao.
 	gl.BindVertexArray(0)
 
+	// Loop principal da aplicacao.
 	for !window.ShouldClose() {
+		// Processa eventos de janela, teclado, mouse etc.
 		glfw.PollEvents()
 
+		// Define a cor usada para limpar a tela.
 		gl.ClearColor(0.08, 0.09, 0.12, 1.0)
+		// Limpa o buffer de cor com a cor definida acima.
 		gl.Clear(gl.COLOR_BUFFER_BIT)
 
+		// Ativa o programa de shader.
 		gl.UseProgram(program)
+		// Vincula a textura na unidade 0 para o sampler do fragment shader.
+		gl.ActiveTexture(gl.TEXTURE0)
+		gl.BindTexture(gl.TEXTURE_2D, texture)
+		// Reassocia o VAO configurado para o quadrado.
 		gl.BindVertexArray(vao)
+		// Desenha 6 indices como triangulos.
 		gl.DrawElements(gl.TRIANGLES, int32(len(indices)), gl.UNSIGNED_INT,
 			gl.PtrOffset(0))
 
+		// Exibe o frame renderizado na janela.
 		window.SwapBuffers()
 	}
 }
 
 func initGLFW() *glfw.Window {
+	// Inicializa a biblioteca responsavel por janela, contexto e input.
 	if err := glfw.Init(); err != nil {
 		log.Fatalln("erro ao inicializar GLFW:", err)
 	}
 
+	// A janela nao podera ser redimensionada.
 	glfw.WindowHint(glfw.Resizable, glfw.False)
+	// Pede um contexto OpenGL 4.1.
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 1)
+	// Pede o perfil core, sem API legada.
 	glfw.WindowHint(glfw.OpenGLProfile, glfw.OpenGLCoreProfile)
+	// Necessario em alguns sistemas para contexto moderno.
 	glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
 
+	// Cria a janela e o contexto OpenGL.
 	window, err := glfw.CreateWindow(windowWidth, windowHeight, windowTitle, nil, nil)
 	if err != nil {
 		log.Fatalln("erro ao criar janela:", err)
 	}
 
+	// Torna esse contexto o atual da thread principal.
 	window.MakeContextCurrent()
+	// Ativa VSync para sincronizar com a taxa de atualizacao do monitor.
 	glfw.SwapInterval(1)
 
 	return window
 }
 
 func initOpenGL() {
+	// Carrega os ponteiros para as funcoes OpenGL do driver atual.
 	if err := gl.Init(); err != nil {
 		log.Fatalln("erro ao inicializar OpenGL:", err)
 	}
 
+	// Imprime a versao do OpenGL detectada.
 	log.Println("OpenGL version:", gl.GoStr(gl.GetString(gl.VERSION)))
 }
