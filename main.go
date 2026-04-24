@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-gl/gl/v4.1-core/gl"
 	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/go-gl/mathgl/mgl32"
 )
 
 const (
@@ -15,6 +16,11 @@ const (
 	windowHeight = 600
 	// Titulo mostrado na barra da janela.
 	windowTitle = "g-engine"
+	// Tamanho do sprite no mundo 2D.
+	spriteWidth  = 96
+	spriteHeight = 96
+	// Velocidade do player em unidades por segundo.
+	playerSpeed = 260.0
 )
 
 func init() {
@@ -47,6 +53,15 @@ func main() {
 	gl.UseProgram(program)
 	textureUniform := gl.GetUniformLocation(program, gl.Str("texture0\x00"))
 	gl.Uniform1i(textureUniform, 0)
+	modelUniform := gl.GetUniformLocation(program, gl.Str("model\x00"))
+	viewUniform := gl.GetUniformLocation(program, gl.Str("view\x00"))
+	projectionUniform := gl.GetUniformLocation(program, gl.Str("projection\x00"))
+
+	// Estado inicial do player e da camera.
+	playerPos := mgl32.Vec3{windowWidth / 2, windowHeight / 2, 0}
+	cameraPos := playerPos
+	projection := mgl32.Ortho(0, windowWidth, 0, windowHeight, -1, 1)
+	lastFrame := glfw.GetTime()
 
 	// Cada vertice tem 5 floats:
 	// x, y, z, u, v
@@ -112,6 +127,51 @@ func main() {
 		// Processa eventos de janela, teclado, mouse etc.
 		glfw.PollEvents()
 
+		// Calcula o tempo entre frames para manter o movimento suave.
+		currentFrame := glfw.GetTime()
+		deltaTime := float32(currentFrame - lastFrame)
+		lastFrame = currentFrame
+
+		var movement mgl32.Vec3
+		if window.GetKey(glfw.KeyW) == glfw.Press {
+			movement[1] += 1
+		}
+		if window.GetKey(glfw.KeyS) == glfw.Press {
+			movement[1] -= 1
+		}
+		if window.GetKey(glfw.KeyA) == glfw.Press {
+			movement[0] -= 1
+		}
+		if window.GetKey(glfw.KeyD) == glfw.Press {
+			movement[0] += 1
+		}
+
+		// Normaliza o vetor para a diagonal nao ser mais rapida.
+		if movement.Len() > 0 {
+			movement = movement.Normalize()
+		}
+		playerPos = playerPos.Add(movement.Mul(playerSpeed * deltaTime))
+		if movement.Len() > 0 {
+			log.Printf(
+				"input movimento=(%.2f, %.2f) playerPos=(%.2f, %.2f) deltaTime=%.4f",
+				movement.X(),
+				movement.Y(),
+				playerPos.X(),
+				playerPos.Y(),
+				deltaTime,
+			)
+		}
+
+		// Mantem a camera centrada no player.
+		cameraPos = playerPos
+		model := mgl32.Translate3D(playerPos.X(), playerPos.Y(), 0).
+			Mul4(mgl32.Scale3D(spriteWidth, spriteHeight, 1))
+		view := mgl32.Translate3D(
+			-cameraPos.X()+windowWidth/2,
+			-cameraPos.Y()+windowHeight/2,
+			0,
+		)
+
 		// Define a cor usada para limpar a tela.
 		gl.ClearColor(0.08, 0.09, 0.12, 1.0)
 		// Limpa o buffer de cor com a cor definida acima.
@@ -119,6 +179,9 @@ func main() {
 
 		// Ativa o programa de shader.
 		gl.UseProgram(program)
+		gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
+		gl.UniformMatrix4fv(viewUniform, 1, false, &view[0])
+		gl.UniformMatrix4fv(projectionUniform, 1, false, &projection[0])
 		// Vincula a textura na unidade 0 para o sampler do fragment shader.
 		gl.ActiveTexture(gl.TEXTURE0)
 		gl.BindTexture(gl.TEXTURE_2D, texture)
