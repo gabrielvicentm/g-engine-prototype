@@ -10,16 +10,23 @@ import (
 	"github.com/go-gl/gl/v4.1-core/gl"
 )
 
-func NewTexture(path string) (uint32, error) {
+type Texture struct {
+	ID     uint32
+	Width  int
+	Height int
+	Path   string
+}
+
+func NewTexture(path string) (*Texture, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return 0, fmt.Errorf("falha ao abrir textura %q: %w", path, err)
+		return nil, fmt.Errorf("falha ao abrir textura %q: %w", path, err)
 	}
 	defer file.Close()
 
 	src, _, err := image.Decode(file)
 	if err != nil {
-		return 0, fmt.Errorf("falha ao decodificar textura %q: %w", path, err)
+		return nil, fmt.Errorf("falha ao decodificar textura %q: %w", path, err)
 	}
 
 	rgba := image.NewRGBA(src.Bounds())
@@ -50,5 +57,10 @@ func NewTexture(path string) (uint32, error) {
 	gl.GenerateMipmap(gl.TEXTURE_2D)
 	gl.BindTexture(gl.TEXTURE_2D, 0)
 
-	return texture, nil
+	return &Texture{
+		ID:     texture,
+		Width:  size.X,
+		Height: size.Y,
+		Path:   path,
+	}, nil
 }

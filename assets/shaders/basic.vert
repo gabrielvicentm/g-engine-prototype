@@ -10,6 +10,8 @@ layout (location = 1) in vec2 aTexCoord;
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
+uniform vec2 uvScale;
+uniform vec2 uvOffset;
 
 // Coordenada de textura interpolada para o fragment shader.
 out vec2 vTexCoord;
@@ -18,6 +20,6 @@ void main() {
     // Converte o vertice do espaco local para a tela.
     gl_Position = projection * view * model * vec4(aPos, 1.0);
 
-    // Repassa a UV do vertice para o proximo estagio do pipeline.
-    vTexCoord = aTexCoord;
+    // Ajusta a UV para permitir atlas de tiles e sprites inteiros no mesmo quad.
+    vTexCoord = aTexCoord * uvScale + uvOffset;
 }

@@ -43,8 +43,14 @@ func main() {
 		log.Fatalln("erro ao criar shader program:", err)
 	}
 
+	// Carrega o tilemap e o tileset atlas usados no cenario.
+	tileMap, err := LoadMap("assets/maps/mapa1.tmj")
+	if err != nil {
+		log.Fatalln("erro ao carregar mapa:", err)
+	}
+
 	// Carrega a textura do sprite e faz o upload uma vez para a GPU.
-	texture, err := NewTexture("assets/textures/zombie1.png")
+	playerTexture, err := NewTexture("assets/textures/zombie1.png")
 	if err != nil {
 		log.Fatalln("erro ao carregar textura:", err)
 	}
@@ -56,9 +62,11 @@ func main() {
 	modelUniform := gl.GetUniformLocation(program, gl.Str("model\x00"))
 	viewUniform := gl.GetUniformLocation(program, gl.Str("view\x00"))
 	projectionUniform := gl.GetUniformLocation(program, gl.Str("projection\x00"))
+	uvScaleUniform := gl.GetUniformLocation(program, gl.Str("uvScale\x00"))
+	uvOffsetUniform := gl.GetUniformLocation(program, gl.Str("uvOffset\x00"))
 
 	// Estado inicial do player e da camera.
-	playerPos := mgl32.Vec3{windowWidth / 2, windowHeight / 2, 0}
+	playerPos := mgl32.Vec3{tileMap.WorldWidth() / 2, tileMap.WorldHeight() / 2, 0}
 	cameraPos := playerPos
 	projection := mgl32.Ortho(0, windowWidth, 0, windowHeight, -1, 1)
 	lastFrame := glfw.GetTime()
@@ -179,17 +187,44 @@ func main() {
 
 		// Ativa o programa de shader.
 		gl.UseProgram(program)
-		gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
 		gl.UniformMatrix4fv(viewUniform, 1, false, &view[0])
 		gl.UniformMatrix4fv(projectionUniform, 1, false, &projection[0])
-		// Vincula a textura na unidade 0 para o sampler do fragment shader.
-		gl.ActiveTexture(gl.TEXTURE0)
-		gl.BindTexture(gl.TEXTURE_2D, texture)
-		// Reassocia o VAO configurado para o quadrado.
 		gl.BindVertexArray(vao)
-		// Desenha 6 indices como triangulos.
-		gl.DrawElements(gl.TRIANGLES, int32(len(indices)), gl.UNSIGNED_INT,
-			gl.PtrOffset(0))
+		gl.ActiveTexture(gl.TEXTURE0)
+
+		// Renderiza somente os tiles visiveis nas layers do mapa.
+		startCol, endCol, startRow, endRow := tileMap.VisibleRange(cameraPos)
+		gl.BindTexture(gl.TEXTURE_2D, tileMap.Texture.ID)
+		for _, layer := range tileMap.Layers {
+			if !layer.Visible || layer.Type != "tilelayer" {
+				continue
+			}
+
+			for row := startRow; row <= endRow; row++ {
+				for col := startCol; col <= endCol; col++ {
+					index := row*layer.Width + col
+					gid := layer.Data[index]
+					uvScale, uvOffset, ok := tileMap.TileUV(gid)
+					if !ok {
+						continue
+					}
+
+					tileModel := tileMap.TileModel(row, col)
+					gl.UniformMatrix4fv(modelUniform, 1, false, &tileModel[0])
+					gl.Uniform2f(uvScaleUniform, uvScale.X(), uvScale.Y())
+					gl.Uniform2f(uvOffsetUniform, uvOffset.X(), uvOffset.Y())
+					gl.DrawElements(gl.TRIANGLES, int32(len(indices)), gl.UNSIGNED_INT, gl.PtrOffset(0))
+				}
+			}
+		}
+
+		// Renderiza o player por cima do mapa usando a textura inteira.
+		gl.UniformMatrix4fv(modelUniform, 1, false, &model[0])
+		gl.Uniform2f(uvScaleUniform, 1, 1)
+		gl.Uniform2f(uvOffsetUniform, 0, 0)
+		gl.ActiveTexture(gl.TEXTURE0)
+		gl.BindTexture(gl.TEXTURE_2D, playerTexture.ID)
+		gl.DrawElements(gl.TRIANGLES, int32(len(indices)), gl.UNSIGNED_INT, gl.PtrOffset(0))
 
 		// Exibe o frame renderizado na janela.
 		window.SwapBuffers()
