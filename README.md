@@ -3,3 +3,5 @@
   
 go run . -mode=server 
 go run . -mode=client
+
+proximos passos
