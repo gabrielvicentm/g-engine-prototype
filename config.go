@@ -15,6 +15,7 @@ const (
 	defaultMapPath    = "assets/maps/mapa1.tmj"
 	playerTexturePath = "assets/textures/zombie1.png"
 
+	//TENHO QUE MUDAR ISSO DAQUI PARA ESSES DADOS VIREM DO mapa, não pode ser hardcoded isso, pq se o mapa mudar, tem que alterar isso aqui na mão
 	defaultMapTilesWide  = 50
 	defaultMapTilesHigh  = 50
 	defaultMapTileWidth  = 16

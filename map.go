@@ -77,6 +77,7 @@ func (m *TileMap) WorldHeight() float32 {
 	return float32(m.Height * m.TileHeight)
 }
 
+//futuramente tem que alterar isso daqui, pq o mapa vai ser bem maior
 func (m *TileMap) VisibleRange(cameraPos mgl32.Vec3) (int, int, int, int) {
 	worldLeft := cameraPos.X() - windowWidth/2
 	worldRight := cameraPos.X() + windowWidth/2
